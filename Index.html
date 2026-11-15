@@ -1,0 +1,164 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Acceso Portón</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background-color: #121212;
+      color: #ffffff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .contenedor {
+      background-color: #1e1e1e;
+      padding: 30px;
+      border-radius: 16px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      text-align: center;
+      width: 90%;
+      max-width: 340px;
+    }
+    h2 { margin-top: 0; font-size: 1.4rem; }
+    input {
+      width: 80%;
+      font-size: 2rem;
+      text-align: center;
+      letter-spacing: 8px;
+      padding: 12px;
+      margin: 15px 0;
+      border-radius: 10px;
+      border: 2px solid #333;
+      background: #2c2c2c;
+      color: #fff;
+    }
+    button {
+      width: 90%;
+      padding: 15px;
+      font-size: 1.1rem;
+      font-weight: bold;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: 0.2s;
+    }
+    .btn-abrir { background-color: #00c853; color: #000; }
+    .btn-abrir:active { background-color: #009624; }
+    .btn-generar { background-color: #2979ff; color: #fff; }
+    .btn-whatsapp { background-color: #25D366; color: #000; display: none; }
+    .mensaje { margin-top: 15px; font-size: 0.95rem; min-height: 22px; }
+    .pin-grande { font-size: 2.5rem; font-weight: bold; color: #00e676; margin: 15px 0; letter-spacing: 5px; }
+  </style>
+</head>
+<body>
+
+  <!-- VISTA 1: PARA EL VISITANTE (Código QR) -->
+  <div class="contenedor" id="vista-visitante">
+    <h2>Acceso al Portón</h2>
+    <p style="color: #aaa; font-size: 0.9rem;">Ingresa el código de 4 dígitos</p>
+    <input type="tel" id="input-pin" maxlength="4" placeholder="••••">
+    <button class="btn-abrir" onclick="verificarPin()">ABRIR PORTÓN</button>
+    <div class="mensaje" id="msg-visitante"></div>
+  </div>
+
+  <!-- VISTA 2: PANEL DE ADMINISTRADOR (?admin=1) -->
+  <div class="contenedor" id="vista-admin" style="display: none;">
+    <h2>Panel de Control</h2>
+    <p style="color: #aaa; font-size: 0.9rem;">Generar código de un solo uso</p>
+    <div class="pin-grande" id="pin-generado">----</div>
+    <button class="btn-generar" onclick="generarNuevoPin()">GENERAR CÓDIGO</button>
+    <button class="btn-whatsapp" id="btn-wa" onclick="enviarWhatsApp()">Enviar por WhatsApp</button>
+    <div class="mensaje" id="msg-admin"></div>
+  </div>
+
+  <!-- CONEXIÓN CON FIREBASE (Base de datos gratuita) -->
+  <script type="module">
+    import { initializeApp } from "https://gstatic.com";
+    import { getDatabase, ref, set, get } from "https://gstatic.com";
+
+    // ⚠️ AQUÍ PEGARÁS TUS DATOS DE FIREBASE MÁS ADELANTE
+    const firebaseConfig = {
+      apiKey: "TU_API_KEY",
+      authDomain: "TU_://firebaseapp.com",
+      databaseURL: "https://TU_://firebaseio.com",
+      projectId: "TU_PROYECTO",
+      storageBucket: "TU_://appspot.com",
+      messagingSenderId: "TU_NUMERO",
+      appId: "TU_APP_ID"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // Detectar si entraste como administrador (?admin=1)
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('admin') === '1') {
+      document.getElementById('vista-visitante').style.display = 'none';
+      document.getElementById('vista-admin').style.display = 'block';
+    }
+
+    let ultimoPin = "";
+
+    // Función para generar número aleatorio de 4 dígitos
+    window.generarNuevoPin = async function() {
+      const nuevoPin = Math.floor(1000 + Math.random() * 9000).toString();
+      ultimoPin = nuevoPin;
+      
+      document.getElementById('msg-admin').innerText = "Guardando en la nube...";
+      
+      // Guarda el PIN en Firebase
+      await set(ref(db, 'porton/pin_activo'), nuevoPin);
+      
+      document.getElementById('pin-generado').innerText = nuevoPin;
+      document.getElementById('msg-admin').innerText = "✅ Código listo para usar";
+      document.getElementById('btn-wa').style.display = "inline-block";
+    }
+
+    // Función para compartir rápido por WhatsApp
+    window.enviarWhatsApp = function() {
+      const texto = `Hola, tu código de acceso para abrir el portón es: *${ultimoPin}* (Válido para un solo uso).`;
+      window.open(`https://wa.me{encodeURIComponent(texto)}`, '_blank');
+    }
+
+    // Función que revisa el código que escribió la visita
+    window.verificarPin = async function() {
+      const pinIngresado = document.getElementById('input-pin').value;
+      const msg = document.getElementById('msg-visitante');
+
+      if (pinIngresado.length !== 4) {
+        msg.style.color = "#ff5252";
+        msg.innerText = "Escribe los 4 dígitos";
+        return;
+      }
+
+      msg.style.color = "#aaa";
+      msg.innerText = "Verificando...";
+
+      // Consulta el PIN guardado en Firebase
+      const snapshot = await get(ref(db, 'porton/pin_activo'));
+      const pinReal = snapshot.val();
+
+      if (pinReal && pinIngresado === pinReal) {
+        // 1. Manda la orden al ESP32 de abrir
+        await set(ref(db, 'porton/abrir'), true);
+        // 2. Borra el PIN para que nadie más lo vuelva a usar
+        await set(ref(db, 'porton/pin_activo'), null);
+
+        msg.style.color = "#00e676";
+        msg.innerText = "✅ ¡Código correcto! Abriendo portón...";
+        document.getElementById('input-pin').value = "";
+      } else {
+        msg.style.color = "#ff5252";
+        msg.innerText = "❌ Código incorrecto o ya fue utilizado";
+      }
+    }
+  </script>
+</body>
+</html>
