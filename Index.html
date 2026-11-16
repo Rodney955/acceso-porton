@@ -14,6 +14,7 @@
       align-items: center;
       height: 100vh;
       margin: 0;
+      user-select: none;
     }
     .contenedor {
       background-color: #1e1e1e;
@@ -24,7 +25,7 @@
       width: 90%;
       max-width: 340px;
     }
-    h2 { margin-top: 0; font-size: 1.4rem; }
+    h2 { margin-top: 0; font-size: 1.4rem; cursor: pointer; }
     input {
       width: 80%;
       font-size: 2rem;
@@ -52,70 +53,81 @@
     .btn-abrir:active { background-color: #009624; }
     .btn-generar { background-color: #2979ff; color: #fff; }
     .btn-whatsapp { background-color: #25D366; color: #000; display: none; }
+    .btn-volver { background-color: #424242; color: #fff; font-size: 0.9rem; padding: 10px; }
     .mensaje { margin-top: 15px; font-size: 0.95rem; min-height: 22px; }
     .pin-grande { font-size: 2.5rem; font-weight: bold; color: #00e676; margin: 15px 0; letter-spacing: 5px; }
   </style>
 </head>
 <body>
 
-  <!-- VISTA 1: PARA EL VISITANTE (Código QR) -->
   <div class="contenedor" id="vista-visitante">
-    <h2>Acceso al Portón</h2>
+    <h2 id="titulo-secreto">Acceso al Portón</h2>
     <p style="color: #aaa; font-size: 0.9rem;">Ingresa el código de 4 dígitos</p>
     <input type="tel" id="input-pin" maxlength="4" placeholder="••••">
     <button class="btn-abrir" onclick="verificarPin()">ABRIR PORTÓN</button>
     <div class="mensaje" id="msg-visitante"></div>
   </div>
 
-  <!-- VISTA 2: PANEL DE ADMINISTRADOR (?admin=1) -->
   <div class="contenedor" id="vista-admin" style="display: none;">
     <h2>Panel de Control</h2>
     <p style="color: #aaa; font-size: 0.9rem;">Generar código de un solo uso</p>
     <div class="pin-grande" id="pin-generado">----</div>
     <button class="btn-generar" onclick="generarNuevoPin()">GENERAR CÓDIGO</button>
     <button class="btn-whatsapp" id="btn-wa" onclick="enviarWhatsApp()">Enviar por WhatsApp</button>
+    <button class="btn-volver" onclick="volverVisitante()">Volver a pantalla de visita</button>
     <div class="mensaje" id="msg-admin"></div>
   </div>
 
-  <!-- CONEXIÓN CON FIREBASE (Base de datos gratuita) -->
   <script type="module">
     import { initializeApp } from "https://gstatic.com";
     import { getDatabase, ref, set, get } from "https://gstatic.com";
 
-     web app's Firebase configuration
-
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
     const firebaseConfig = {
-     apiKey: "AIzaSyAaVDZfvvhVov918co8KOXyiL0WHJtPZwQ",
-     authDomain: "control-porton-jurica.firebaseapp.com",
-     databaseURL: "https://control-porton-jurica-default-rtdb.firebaseio.com",
-     projectId: "control-porton-jurica",
-     storageBucket: "control-porton-jurica.firebasestorage.app",
-     messagingSenderId: "311950117927",
-     appId: "1:311950117927:web:3d377e1fa911e19d551202",
-     measurementId: "G-2EM0CPGP34"
+      apiKey: "AIzaSyAaVDZfvvhVov918co8KOXyiL0WHJtPZwQ",
+      authDomain: "://firebaseapp.com",
+      databaseURL: "https://firebaseio.com",
+      projectId: "control-porton-jurica",
+      storageBucket: "control-porton-jurica.firebasestorage.app",
+      messagingSenderId: "311950117927",
+      appId: "1:311950117927:web:3d377e1fa911e19d551202",
+      measurementId: "G-2EM0CPGP34"
     };
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // Detectar si entraste como administrador (?admin=1)
     const params = new URLSearchParams(window.location.search);
     if (params.get('admin') === '1') {
+      mostrarAdmin();
+    }
+
+    let toques = 0;
+    document.getElementById('titulo-secreto').addEventListener('click', () => {
+      toques++;
+      if (toques >= 4) {
+        toques = 0;
+        mostrarAdmin();
+      }
+    });
+
+    function mostrarAdmin() {
       document.getElementById('vista-visitante').style.display = 'none';
       document.getElementById('vista-admin').style.display = 'block';
     }
 
+    window.volverVisitante = function() {
+      document.getElementById('vista-admin').style.display = 'none';
+      document.getElementById('vista-visitante').style.display = 'block';
+    }
+
     let ultimoPin = "";
 
-    // Función para generar número aleatorio de 4 dígitos
     window.generarNuevoPin = async function() {
       const nuevoPin = Math.floor(1000 + Math.random() * 9000).toString();
       ultimoPin = nuevoPin;
       
       document.getElementById('msg-admin').innerText = "Guardando en la nube...";
       
-      // Guarda el PIN en Firebase
       await set(ref(db, 'porton/pin_activo'), nuevoPin);
       
       document.getElementById('pin-generado').innerText = nuevoPin;
@@ -123,13 +135,11 @@
       document.getElementById('btn-wa').style.display = "inline-block";
     }
 
-    // Función para compartir rápido por WhatsApp
     window.enviarWhatsApp = function() {
       const texto = `Hola, tu código de acceso para abrir el portón es: *${ultimoPin}* (Válido para un solo uso).`;
       window.open(`https://wa.me{encodeURIComponent(texto)}`, '_blank');
     }
 
-    // Función que revisa el código que escribió la visita
     window.verificarPin = async function() {
       const pinIngresado = document.getElementById('input-pin').value;
       const msg = document.getElementById('msg-visitante');
@@ -143,14 +153,11 @@
       msg.style.color = "#aaa";
       msg.innerText = "Verificando...";
 
-      // Consulta el PIN guardado en Firebase
       const snapshot = await get(ref(db, 'porton/pin_activo'));
       const pinReal = snapshot.val();
 
       if (pinReal && pinIngresado === pinReal) {
-        // 1. Manda la orden al ESP32 de abrir
         await set(ref(db, 'porton/abrir'), true);
-        // 2. Borra el PIN para que nadie más lo vuelva a usar
         await set(ref(db, 'porton/pin_activo'), null);
 
         msg.style.color = "#00e676";
