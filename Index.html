@@ -78,23 +78,22 @@
     <div class="mensaje" id="msg-admin"></div>
   </div>
 
-  <script type="module">
-    import { initializeApp } from "https://gstatic.com";
-    import { getDatabase, ref, set, get } from "https://gstatic.com";
+  <script src="https://gstatic.com"></script>
+  <script src="https://gstatic.com"></script>
 
+  <script>
     const firebaseConfig = {
       apiKey: "AIzaSyAaVDZfvvhVov918co8KOXyiL0WHJtPZwQ",
-      authDomain: "://firebaseapp.com",
-      databaseURL: "https://firebaseio.com",
+      authDomain: "control-porton-jurica" + ".firebaseapp.com",
+      databaseURL: "https://" + "://firebaseio.com",
       projectId: "control-porton-jurica",
-      storageBucket: "control-porton-jurica.firebasestorage.app",
+      storageBucket: "control-porton-jurica" + ".firebasestorage.app",
       messagingSenderId: "311950117927",
-      appId: "1:311950117927:web:3d377e1fa911e19d551202",
-      measurementId: "G-2EM0CPGP34"
+      appId: "1:311950117927:web:3d377e1fa911e19d551202"
     };
 
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
 
     const params = new URLSearchParams(window.location.search);
     if (params.get('admin') === '1') {
@@ -115,32 +114,34 @@
       document.getElementById('vista-admin').style.display = 'block';
     }
 
-    window.volverVisitante = function() {
+    function volverVisitante() {
       document.getElementById('vista-admin').style.display = 'none';
       document.getElementById('vista-visitante').style.display = 'block';
     }
 
     let ultimoPin = "";
 
-    window.generarNuevoPin = async function() {
+    function generarNuevoPin() {
       const nuevoPin = Math.floor(1000 + Math.random() * 9000).toString();
       ultimoPin = nuevoPin;
       
       document.getElementById('msg-admin').innerText = "Guardando en la nube...";
       
-      await set(ref(db, 'porton/pin_activo'), nuevoPin);
-      
-      document.getElementById('pin-generado').innerText = nuevoPin;
-      document.getElementById('msg-admin').innerText = "✅ Código listo para usar";
-      document.getElementById('btn-wa').style.display = "inline-block";
+      db.ref('porton/pin_activo').set(nuevoPin).then(() => {
+        document.getElementById('pin-generado').innerText = nuevoPin;
+        document.getElementById('msg-admin').innerText = "✅ Código listo para usar";
+        document.getElementById('btn-wa').style.display = "inline-block";
+      }).catch((error) => {
+        document.getElementById('msg-admin').innerText = "Error: " + error.message;
+      });
     }
 
-    window.enviarWhatsApp = function() {
+    function enviarWhatsApp() {
       const texto = `Hola, tu código de acceso para abrir el portón es: *${ultimoPin}* (Válido para un solo uso).`;
-      window.open(`https://wa.me{encodeURIComponent(texto)}`, '_blank');
+      window.open("https://" + "wa.me/?text=" + encodeURIComponent(texto), '_blank');
     }
 
-    window.verificarPin = async function() {
+    function verificarPin() {
       const pinIngresado = document.getElementById('input-pin').value;
       const msg = document.getElementById('msg-visitante');
 
@@ -153,20 +154,21 @@
       msg.style.color = "#aaa";
       msg.innerText = "Verificando...";
 
-      const snapshot = await get(ref(db, 'porton/pin_activo'));
-      const pinReal = snapshot.val();
+      db.ref('porton/pin_activo').once('value').then((snapshot) => {
+        const pinReal = snapshot.val();
 
-      if (pinReal && pinIngresado === pinReal) {
-        await set(ref(db, 'porton/abrir'), true);
-        await set(ref(db, 'porton/pin_activo'), null);
+        if (pinReal && pinIngresado === pinReal) {
+          db.ref('porton/abrir').set(true);
+          db.ref('porton/pin_activo').set(null);
 
-        msg.style.color = "#00e676";
-        msg.innerText = "✅ ¡Código correcto! Abriendo portón...";
-        document.getElementById('input-pin').value = "";
-      } else {
-        msg.style.color = "#ff5252";
-        msg.innerText = "❌ Código incorrecto o ya fue utilizado";
-      }
+          msg.style.color = "#00e676";
+          msg.innerText = "✅ ¡Código correcto! Abriendo portón...";
+          document.getElementById('input-pin').value = "";
+        } else {
+          msg.style.color = "#ff5252";
+          msg.innerText = "❌ Código incorrecto o ya fue utilizado";
+        }
+      });
     }
   </script>
 </body>
